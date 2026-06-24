@@ -2,56 +2,88 @@ openapi: 3.0.3
 info:
   title: Tattersall IDP - API de Ingesta de Documentos
   description: |
-    API REST para la carga de documentos vehiculares desde proveedores externos (satélites) hacia el sistema de gestión documental inteligente de Tattersall.
+    # 📄 Tattersall IDP - API de Ingesta
+    
+    Bienvenido a la API REST de **Tattersall Document Processing (IDP)**. Este servicio permite a proveedores externos (satélites) realizar la carga directa de documentos vehiculares hacia el sistema central de gestión documental inteligente.
 
-    ## Autenticación
-    Todas las peticiones requieren un header `x-api-key` con la clave asignada a cada proveedor.
-    Sin este header, la API retorna `403 Forbidden`.
+    ---
 
-    ## Endpoint
-    `PUT /documents` — Carga directa de archivo (máximo 10 MB).
+    ### 🚀 Inicio Rápido (Prueba de Conexión)
+    Puedes probar la API de inmediato ejecutando el siguiente comando `curl` en tu terminal (utilizando las credenciales de prueba provistas):
 
-    ## Headers requeridos
+    ```bash
+    curl -X PUT "https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev/documents" \
+      -H "x-api-key: abcdefghijklmnopqrstuvxwyz" \
+      -H "Content-Type: application/pdf" \
+      -H "x-document-type: permiso-circulacion" \
+      -H "x-vehicle-id: TEST01" \
+      -H "x-provider-id: escala24x7-test" \
+      -H "x-filename: nombre-pdf.pdf" \
+      --data-binary @ruta/archivo/pdf.pdf
+    ```
 
-    | Header | Obligatorio | Descripción |
-    |--------|:-----------:|-------------|
-    | `x-api-key` | ✅ | Clave de API asignada al proveedor |
-    | `Content-Type` | ✅ | Tipo MIME del archivo (ver formatos aceptados) |
-    | `x-document-type` | ✅ | Tipo de documento vehicular (ver lista) |
-    | `x-vehicle-id` | ✅ | Identificador del vehículo (patente) |
-    | `x-filename` | ✅ | Nombre original del archivo con extensión |
-    | `x-provider-id` | ❌ | Identificador del proveedor (para trazabilidad) |
+    ---
 
-    ## Formatos aceptados
-    - `application/pdf` — Archivos PDF
-    - `application/msword` — Archivos Word (.doc)
-    - `application/vnd.openxmlformats-officedocument.wordprocessingml.document` — Archivos Word (.docx)
+    ### 🔒 Seguridad y Autenticación
+    Para consumir cualquier recurso de esta API, debes incluir tu clave de acceso en las cabeceras HTTP:
+    * **Header:** `x-api-key`
+    * **Valor:** Clave provista por el administrador (Ej. `abcdefghijklmnopqrstuvxwyz` para pruebas).
+    * _Peticiones sin esta cabecera o con claves inválidas recibirán una respuesta HTTP `403 Forbidden`._
 
-    ## Tipos de documento permitidos (x-document-type)
-    `permiso-circulacion` | `revision-tecnica` | `seguro-obligatorio` | `inscripcion-vehicular` | `certificado-emision` | `padron-vehicular` | `transferencia` | `certificado-anotaciones` | `homologacion` | `certificado-generico` | `otro`
+    ---
 
-    ## Nombre del archivo en destino
-    El archivo se almacena con el formato:
-    `{nombre-original}-{timestamp}-{id}.{extension}`
+    ### 📊 Resumen de Cabeceras (Headers) Requeridas
 
-    Ejemplo: `permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf`
+    | Cabecera | Tipo | Obligatorio | Descripción | Ejemplo / Valor |
+    | :--- | :---: | :---: | :--- | :--- |
+    | `x-api-key` | `string` | **Sí** 🔑 | Clave de API asignada | `abcdefghijklmnopqrstuvxwyz` |
+    | `Content-Type` | `string` | **Sí** 📁 | Tipo MIME del archivo | `application/pdf` |
+    | `x-document-type` | `string` | **Sí** 🏷️ | Tipo de documento vehicular | `permiso-circulacion` |
+    | `x-vehicle-id` | `string` | **Sí** 🚗 | Patente del vehículo asociado | `TEST01` o `ABCD12` |
+    | `x-filename` | `string` | **Sí** 📄 | Nombre original del archivo | `nombre-pdf.pdf` |
+    | `x-provider-id` | `string` | No 📡 | ID del proveedor (auditoría) | `escala24x7-test` |
 
-    ## Trazabilidad
-    Cada intento de carga (exitoso o rechazado) queda registrado con un `upload_id` único.
-    Este ID se retorna en todas las respuestas para auditoría.
+    ---
 
-    ## Límites
-    - Tamaño máximo por archivo: **10 MB** (limitación de API Gateway)
-    - Rate limit: **20 requests/segundo** por API Key
-    - Burst: **50 requests** simultáneos
-    - Quota diaria: **5000 requests/día** por API Key
+    ### 📂 Formatos de Archivo Aceptados
+    El servicio acepta únicamente los siguientes tipos de contenido en el cuerpo de la petición (`body`):
+    * 📑 **PDF:** `application/pdf`
+    * 📝 **Word antiguo:** `application/msword` (`.doc`)
+    * 📝 **Word moderno:** `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (`.docx`)
+
+    ---
+
+    ### 🏷️ Tipos de Documento Soportados (`x-document-type`)
+    Para una correcta clasificación en la plataforma, el header `x-document-type` debe corresponder exactamente a uno de los siguientes valores:
+    * `permiso-circulacion` — Permiso de Circulación
+    * `revision-tecnica` — Revisión Técnica
+    * `seguro-obligatorio` — SOAP (Seguro Obligatorio)
+    * `inscripcion-vehicular` — Inscripción de Vehículo (Padrón)
+    * `certificado-emision` — Certificado de Emisiones contaminantes
+    * `padron-vehicular` — Padrón del Vehículo
+    * `transferencia` — Contrato o solicitud de transferencia
+    * `certificado-anotaciones` — Certificado de Anotaciones Vigentes (CAV)
+    * `homologacion` — Certificado de Homologación
+    * `certificado-generico` — Otros certificados vehiculares
+    * `otro` — Documento genérico / no clasificado
+
+    ---
+
+    ### ⚙️ Límites del Servicio
+    * **Tamaño Máximo:** `10 MB` por archivo (límite físico de API Gateway).
+    * **Rate Limiting:** `20 peticiones/segundo` por API Key.
+    * **Burst Limit:** `50 peticiones` concurrentes.
+    * **Cuota Diaria:** `5,000 peticiones/día` por API Key.
+    * **Nombramiento en S3:** El archivo se almacena bajo el formato `{nombre-original}-{timestamp}-{id-único}.{ext}`.
   version: 2.0.0
   contact:
     name: Equipo Escala 24x7
 
 servers:
+  - url: https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev
+    description: Servidor de Pruebas (API Gateway de Pruebas)
   - url: https://{apiId}.execute-api.us-east-1.amazonaws.com/dev
-    description: Ambiente Desarrollo
+    description: Ambiente Desarrollo (Plantilla)
     variables:
       apiId:
         default: "REPLACE_CON_API_ID"
@@ -59,14 +91,19 @@ servers:
 security:
   - ApiKeyAuth: []
 
+tags:
+  - name: Ingesta de Documentos
+    description: Operaciones para cargar archivos digitales al sistema de almacenamiento inteligente.
+
 paths:
   /documents:
     put:
-      summary: Carga directa de documento
+      tags:
+        - Ingesta de Documentos
+      summary: Carga directa de documento vehicular
       description: |
-        Sube un archivo PDF o Word directamente a través de la API.
-        El archivo no puede superar los 10 MB.
-        Los metadatos del documento se envían como headers HTTP.
+        Sube un archivo PDF o Word directamente en formato binario.
+        El tamaño del archivo no debe exceder los 10 MB. Las cabeceras de metadatos son obligatorias para el registro en el catálogo vehicular.
       operationId: uploadDocument
       security:
         - ApiKeyAuth: []
@@ -74,9 +111,11 @@ paths:
         - name: x-document-type
           in: header
           required: true
-          description: Tipo de documento vehicular
+          description: |
+            Tipo de documento vehicular que se está subiendo. Debe coincidir con los tipos de la lista de permitidos.
           schema:
             type: string
+            default: permiso-circulacion
             enum:
               - permiso-circulacion
               - revision-tecnica
@@ -92,25 +131,26 @@ paths:
         - name: x-vehicle-id
           in: header
           required: true
-          description: Identificador del vehículo (patente)
+          description: Identificador de la patente del vehículo. Debe ser alfanumérico.
           schema:
             type: string
-            example: "ABCD12"
+            example: "TEST01"
         - name: x-filename
           in: header
           required: true
-          description: Nombre original del archivo con extensión
+          description: Nombre original del archivo, incluyendo la extensión (.pdf, .doc, .docx).
           schema:
             type: string
-            example: "permiso-circulacion-ABCD12.pdf"
+            example: "nombre-pdf.pdf"
         - name: x-provider-id
           in: header
           required: false
-          description: Identificador del proveedor (para trazabilidad)
+          description: Identificador único del proveedor o satélite para trazabilidad.
           schema:
             type: string
-            example: "gespar"
+            example: "escala24x7-test"
       requestBody:
+        description: Contenido binario del archivo a subir.
         required: true
         content:
           application/pdf:
@@ -127,7 +167,7 @@ paths:
               format: binary
       responses:
         '200':
-          description: Documento subido exitosamente
+          description: Documento subido y catalogado exitosamente
           content:
             application/json:
               schema:
@@ -135,17 +175,17 @@ paths:
               example:
                 message: "Documento subido exitosamente"
                 upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                s3_key: "ingesta/permiso-circulacion/ABCD12/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
+                s3_key: "ingesta/permiso-circulacion/TEST01/nombre-pdf-20260624_152040-8d0323e7.pdf"
                 size_bytes: 245000
         '400':
-          description: Error de validación
+          description: Error en la validación de cabeceras o tipo de archivo no soportado
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
               examples:
                 missing_headers:
-                  summary: Headers faltantes
+                  summary: Cabeceras Requeridas Faltantes
                   value:
                     errors:
                       - "Header x-document-type es requerido"
@@ -153,19 +193,19 @@ paths:
                       - "Header x-filename es requerido"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 invalid_content_type:
-                  summary: Content-Type no soportado
+                  summary: Content-Type No Soportado
                   value:
                     errors:
                       - "Content-Type no soportado. Permitidos: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 invalid_doc_type:
-                  summary: Tipo de documento no válido
+                  summary: Tipo de Documento Inválido
                   value:
                     errors:
                       - "x-document-type invalido. Permitidos: ['permiso-circulacion', 'revision-tecnica', ...]"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         '403':
-          description: API Key inválida o no proporcionada
+          description: Clave de API no provista, expirada o no autorizada
           content:
             application/json:
               schema:
@@ -173,7 +213,7 @@ paths:
               example:
                 message: "Forbidden"
         '500':
-          description: Error interno del servidor
+          description: Falla interna durante el procesamiento del archivo en el servidor
           content:
             application/json:
               schema:
@@ -186,51 +226,65 @@ components:
       in: header
       name: x-api-key
       description: |
-        Clave de API asignada a cada proveedor.
-        Solicitar al equipo de Tattersall / Escala 24x7.
-        Se envía en el header `x-api-key` de cada petición.
+        Clave de API de autenticación.
+        
+        * **Para Pruebas:** Utilice `abcdefghijklmnopqrstuvxwyz`
+        * **Para Producción:** Solicite una clave única al equipo de Tattersall / Escala 24x7.
 
   schemas:
     UploadSuccess:
       type: object
+      description: Respuesta exitosa tras cargar correctamente un documento.
       properties:
         message:
           type: string
-          description: Mensaje de confirmación
+          description: Mensaje descriptivo del estado.
+          example: "Documento subido exitosamente"
         upload_id:
           type: string
           format: uuid
-          description: Identificador único de la carga (para trazabilidad y soporte)
+          description: Identificador único universal (UUID) de la transacción para auditorías.
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         s3_key:
           type: string
-          description: Ruta del archivo en el almacenamiento
+          description: Ruta exacta donde quedó almacenado el archivo en el bucket S3.
+          example: "ingesta/permiso-circulacion/TEST01/nombre-pdf-20260624_152040-8d0323e7.pdf"
         size_bytes:
           type: integer
-          description: Tamaño del archivo subido en bytes
+          description: Tamaño final del archivo almacenado, en bytes.
+          example: 245000
 
     ValidationError:
       type: object
+      description: Respuesta devuelta cuando los metadatos o el archivo no cumplen las validaciones.
       properties:
         errors:
           type: array
           items:
             type: string
-          description: Lista de errores de validación encontrados
+          description: Colección de mensajes que detallan las fallas encontradas.
+          example:
+            - "Header x-document-type es requerido"
         upload_id:
           type: string
           format: uuid
-          description: ID del intento (queda registrado como rechazado para auditoría)
+          description: ID único para el registro e historial de la transacción fallida.
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
     ForbiddenError:
       type: object
+      description: Respuesta de error de autenticación.
       properties:
         message:
           type: string
+          description: Razón de denegación.
           example: "Forbidden"
 
     InternalError:
       type: object
+      description: Respuesta cuando ocurre un problema no controlado del lado del servidor.
       properties:
         error:
           type: string
+          description: Detalles descriptivos de la falla.
           example: "Error interno al subir archivo"
