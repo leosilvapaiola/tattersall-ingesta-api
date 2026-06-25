@@ -4,7 +4,7 @@ info:
   description: |
     # 📄 Tattersall IDP - API de Ingesta
     
-    Bienvenido a la API REST de **Tattersall Document Processing (IDP)**. Este servicio permite a proveedores externos (satélites) realizar la carga directa de documentos vehiculares hacia el sistema central de gestión documental inteligente.
+    Bienvenido a la API REST de **Tattersall Document Processing (IDP)**. Este servicio permite a proveedores externos (satélites) realizar la carga directa de documentos vehiculares hacia la zona de aterrizaje (landing) del sistema de gestión documental inteligente.
 
     ---
 
@@ -15,12 +15,18 @@ info:
     curl -X PUT "https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev/documents" \
       -H "x-api-key: abcdefghijklmnopqrstuvxwyz" \
       -H "Content-Type: application/pdf" \
-      -H "x-document-type: permiso-circulacion" \
-      -H "x-vehicle-id: TEST01" \
       -H "x-provider-id: escala24x7-test" \
-      -H "x-filename: nombre-pdf.pdf" \
+      -H "x-filename: permiso-circulacion-ABCD12.pdf" \
       --data-binary @ruta/archivo/pdf.pdf
     ```
+
+    ---
+
+    ### 🚀 Flujo de Procesamiento
+    1. El proveedor sube el documento via esta API.
+    2. El archivo aterriza en un bucket RAW (zona de landing) organizado por proveedor.
+    3. Un proceso automático posterior (Step Function + Bedrock) identifica el tipo de documento, extrae patente/VIN, y lo clasifica en la estructura final.
+    4. El proveedor **NO necesita clasificar** el documento — solo subirlo.
 
     ---
 
@@ -32,16 +38,14 @@ info:
 
     ---
 
-    ### 📊 Resumen de Cabeceras (Headers) Requeridas
+    ### 📊 Resumen de Cabeceras (Headers)
 
-    | Cabecera | Tipo | Obligatorio | Descripción | Ejemplo / Valor |
+    | Cabecera | Tipo | Obligatorio | Descripción | Ejemplo |
     | :--- | :---: | :---: | :--- | :--- |
     | `x-api-key` | `string` | **Sí** 🔑 | Clave de API asignada | `abcdefghijklmnopqrstuvxwyz` |
     | `Content-Type` | `string` | **Sí** 📁 | Tipo MIME del archivo | `application/pdf` |
-    | `x-document-type` | `string` | **Sí** 🏷️ | Tipo de documento vehicular | `permiso-circulacion` |
-    | `x-vehicle-id` | `string` | **Sí** 🚗 | Patente del vehículo asociado | `TEST01` o `ABCD12` |
-    | `x-filename` | `string` | **Sí** 📄 | Nombre original del archivo | `nombre-pdf.pdf` |
-    | `x-provider-id` | `string` | No 📡 | ID del proveedor (auditoría) | `escala24x7-test` |
+    | `x-provider-id` | `string` | **Sí** 📡 | ID del proveedor (carpeta destino + auditoría) | `gespar` |
+    | `x-filename` | `string` | **Sí** 📄 | Nombre original del archivo con extensión | `permiso-circulacion-ABCD12.pdf` |
 
     ---
 
@@ -53,19 +57,17 @@ info:
 
     ---
 
-    ### 🏷️ Tipos de Documento Soportados (`x-document-type`)
-    Para una correcta clasificación en la plataforma, el header `x-document-type` debe corresponder exactamente a uno de los siguientes valores:
-    * `permiso-circulacion` — Permiso de Circulación
-    * `revision-tecnica` — Revisión Técnica
-    * `seguro-obligatorio` — SOAP (Seguro Obligatorio)
-    * `inscripcion-vehicular` — Inscripción de Vehículo (Padrón)
-    * `certificado-emision` — Certificado de Emisiones contaminantes
-    * `padron-vehicular` — Padrón del Vehículo
-    * `transferencia` — Contrato o solicitud de transferencia
-    * `certificado-anotaciones` — Certificado de Anotaciones Vigentes (CAV)
-    * `homologacion` — Certificado de Homologación
-    * `certificado-generico` — Otros certificados vehiculares
-    * `otro` — Documento genérico / no clasificado
+    ### 📁 Estructura de Almacenamiento
+    Los archivos se depositan en el bucket de landing con la siguiente estructura:
+    ```
+    ingesta/{provider_id}/{filename-original-sanitizado}-{timestamp}-{id-unico}.{ext}
+    ```
+    Ejemplo:
+    ```
+    ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf
+    ```
+
+    La clasificación por tipo de documento y patente/VIN se realiza **automáticamente** en una etapa posterior de procesamiento. El proveedor solo se preocupa de enviar el archivo.
 
     ---
 
@@ -74,8 +76,7 @@ info:
     * **Rate Limiting:** `20 peticiones/segundo` por API Key.
     * **Burst Limit:** `50 peticiones` concurrentes.
     * **Cuota Diaria:** `5,000 peticiones/día` por API Key.
-    * **Nombramiento en S3:** El archivo se almacena bajo el formato `{nombre-original}-{timestamp}-{id-único}.{ext}`.
-  version: 2.0.0
+  version: 3.0.0
   contact:
     name: Equipo Escala 24x7
 
@@ -93,7 +94,7 @@ security:
 
 tags:
   - name: Ingesta de Documentos
-    description: Operaciones para cargar archivos digitales al sistema de almacenamiento inteligente.
+    description: Operaciones para cargar archivos digitales a la zona de landing del sistema.
 
 paths:
   /documents:
@@ -102,53 +103,37 @@ paths:
         - Ingesta de Documentos
       summary: Carga directa de documento vehicular
       description: |
-        Sube un archivo PDF o Word directamente en formato binario.
-        El tamaño del archivo no debe exceder los 10 MB. Las cabeceras de metadatos son obligatorias para el registro en el catálogo vehicular.
+        Sube un archivo PDF o Word directamente en formato binario a la zona de landing.
+        El tamaño del archivo no debe exceder los 10 MB.
+        
+        **El proveedor NO necesita clasificar el documento** — solo identificarse y enviar el archivo con su nombre original. La clasificación (tipo de documento, extracción de patente/VIN) se realiza automáticamente en una etapa posterior.
       operationId: uploadDocument
       security:
         - ApiKeyAuth: []
       parameters:
-        - name: x-document-type
+        - name: x-provider-id
           in: header
           required: true
           description: |
-            Tipo de documento vehicular que se está subiendo. Debe coincidir con los tipos de la lista de permitidos.
+            Identificador único del proveedor o satélite. Determina la carpeta de destino en el bucket y se usa para trazabilidad y auditoría.
+            
+            **Valores permitidos:** `gespar` | `controlcar` | `doki`
+            
+            Para solicitar un nuevo provider_id, contactar al equipo de administración.
           schema:
             type: string
-            default: permiso-circulacion
             enum:
-              - permiso-circulacion
-              - revision-tecnica
-              - seguro-obligatorio
-              - inscripcion-vehicular
-              - certificado-emision
-              - padron-vehicular
-              - transferencia
-              - certificado-anotaciones
-              - homologacion
-              - certificado-generico
-              - otro
-        - name: x-vehicle-id
-          in: header
-          required: true
-          description: Identificador de la patente del vehículo. Debe ser alfanumérico.
-          schema:
-            type: string
-            example: "TEST01"
+              - gespar
+              - controlcar
+              - doki
+            example: "gespar"
         - name: x-filename
           in: header
           required: true
           description: Nombre original del archivo, incluyendo la extensión (.pdf, .doc, .docx).
           schema:
             type: string
-            example: "nombre-pdf.pdf"
-        - name: x-provider-id
-          in: header
-          required: false
-          description: Identificador único del proveedor o satélite para trazabilidad.
-          schema:
-            type: string
-            example: "escala24x7-test"
+            example: "permiso-circulacion-ABCD12.pdf"
       requestBody:
         description: Contenido binario del archivo a subir.
         required: true
@@ -167,7 +152,7 @@ paths:
               format: binary
       responses:
         '200':
-          description: Documento subido y catalogado exitosamente
+          description: Documento subido exitosamente a la zona de landing
           content:
             application/json:
               schema:
@@ -175,7 +160,7 @@ paths:
               example:
                 message: "Documento subido exitosamente"
                 upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                s3_key: "ingesta/permiso-circulacion/TEST01/nombre-pdf-20260624_152040-8d0323e7.pdf"
+                s3_key: "ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
                 size_bytes: 245000
         '400':
           description: Error en la validación de cabeceras o tipo de archivo no soportado
@@ -188,8 +173,7 @@ paths:
                   summary: Cabeceras Requeridas Faltantes
                   value:
                     errors:
-                      - "Header x-document-type es requerido"
-                      - "Header x-vehicle-id es requerido"
+                      - "Header x-provider-id es requerido"
                       - "Header x-filename es requerido"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 invalid_content_type:
@@ -197,12 +181,6 @@ paths:
                   value:
                     errors:
                       - "Content-Type no soportado. Permitidos: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']"
-                    upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                invalid_doc_type:
-                  summary: Tipo de Documento Inválido
-                  value:
-                    errors:
-                      - "x-document-type invalido. Permitidos: ['permiso-circulacion', 'revision-tecnica', ...]"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         '403':
           description: Clave de API no provista, expirada o no autorizada
@@ -248,7 +226,7 @@ components:
         s3_key:
           type: string
           description: Ruta exacta donde quedó almacenado el archivo en el bucket S3.
-          example: "ingesta/permiso-circulacion/TEST01/nombre-pdf-20260624_152040-8d0323e7.pdf"
+          example: "ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
         size_bytes:
           type: integer
           description: Tamaño final del archivo almacenado, en bytes.
@@ -264,7 +242,7 @@ components:
             type: string
           description: Colección de mensajes que detallan las fallas encontradas.
           example:
-            - "Header x-document-type es requerido"
+            - "Header x-provider-id es requerido"
         upload_id:
           type: string
           format: uuid
