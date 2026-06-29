@@ -12,7 +12,7 @@ info:
     Puedes probar la API de inmediato ejecutando el siguiente comando `curl` en tu terminal (utilizando las credenciales de prueba provistas):
 
     ```bash
-    curl -X PUT "https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev/documents" \
+    curl -X PUT "https://{apiId}.execute-api.us-east-1.amazonaws.com/dev/documents" \
       -H "x-api-key: abcdefghijklmnopqrstuvxwyz" \
       -H "Content-Type: application/pdf" \
       -H "x-provider-id: proveedor-ejemplo" \
@@ -27,7 +27,7 @@ info:
     ### 🔒 Seguridad y Autenticación
     Para consumir cualquier recurso de esta API, debes incluir tu clave de acceso en las cabeceras HTTP:
     * **Header:** `x-api-key`
-    * **Valor:** Clave provista por el administrador (Ej. `abcdefghijklmnopqrstuvxwyz` para pruebas).
+    * **Valor:** Clave provista por el administrador (Ej. `abcdefghijklmnopqrstuvxwyz`).
     * _Peticiones sin esta cabecera o con claves inválidas recibirán una respuesta HTTP `403 Forbidden`._
 
     ---
@@ -53,27 +53,6 @@ info:
 
     ---
 
-    ### 📁 Estructura de Almacenamiento
-    Los archivos se depositan en el bucket de landing con la siguiente estructura:
-    ```
-    ingesta/{provider_id}/{patente-vin}/{filename-original-sanitizado}-{timestamp}-{id-unico}.{ext}
-    ```
-    
-    La carpeta del vehículo se forma según los datos enviados:
-    - Ambos headers presentes: `ABCD12-WDB1234567890`
-    - Solo patente: `ABCD12`
-    - Solo VIN: `WDB1234567890`
-
-    Ejemplo:
-    ```
-    ingesta/proveedor-ejemplo/ABCD12-WDB1234567890/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf
-    ingesta/proveedor-ejemplo/WDB1234567890/cert-homologacion-20260624_160000-f1e2d3c4.pdf
-    ```
-
-    La clasificación por tipo de documento se realiza **automáticamente** en una etapa posterior de procesamiento (Bedrock). El proveedor solo se preocupa de enviar el archivo con su identificador de vehículo.
-
-    ---
-
     ### ⚙️ Límites del Servicio
     * **Tamaño Máximo:** `10 MB` por archivo (límite físico de API Gateway).
     * **Rate Limiting:** `20 peticiones/segundo` por API Key.
@@ -84,13 +63,11 @@ info:
     name: Equipo Escala 24x7
 
 servers:
-  - url: https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev
-    description: Servidor de Pruebas (API Gateway de Pruebas)
   - url: https://{apiId}.execute-api.us-east-1.amazonaws.com/dev
     description: Ambiente Desarrollo (Plantilla)
     variables:
       apiId:
-        default: "REPLACE_CON_API_ID"
+        default: "REMPLAZAR_CON_API_ID"
 
 security:
   - ApiKeyAuth: []
@@ -230,7 +207,7 @@ components:
       description: |
         Clave de API de autenticación.
         
-        * **Para Pruebas:** Utilice `abcdefghijklmnopqrstuvxwyz`
+        * **Para Pruebas:** Solicite una clave única al equipo de Tattersall / Escala 24x7.
         * **Para Producción:** Solicite una clave única al equipo de Tattersall / Escala 24x7.
 
   schemas:
