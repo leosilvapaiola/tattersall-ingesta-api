@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
-  title: Tattersall IDP - API de Ingesta de Documentos
+  title: Tattersall - Gestor Documental - API de Ingesta de Documentos
   description: |
-    # 📄 Tattersall IDP - API de Ingesta
+    # 📄 Tattersall Gestor Documental - API de Ingesta
     
-    Bienvenido a la API REST de **Tattersall Document Processing (IDP)**. Este servicio permite a proveedores externos (satélites) realizar la carga directa de documentos vehiculares hacia la zona de aterrizaje (landing) del sistema de gestión documental inteligente.
+    Bienvenido a la API REST del **Gestor Documental de Tattersall**. Este servicio permite a proveedores externos (satélites) realizar la carga directa de documentos vehiculares hacia la zona de aterrizaje (landing) del sistema.
 
     ---
 
@@ -15,18 +15,12 @@ info:
     curl -X PUT "https://kkstm29w21.execute-api.us-east-1.amazonaws.com/dev/documents" \
       -H "x-api-key: abcdefghijklmnopqrstuvxwyz" \
       -H "Content-Type: application/pdf" \
-      -H "x-provider-id: escala24x7-test" \
+      -H "x-provider-id: proveedor-ejemplo" \
+      -H "x-patente: ABCD12" \
+      -H "x-vin: WDB1234567890" \
       -H "x-filename: permiso-circulacion-ABCD12.pdf" \
       --data-binary @ruta/archivo/pdf.pdf
     ```
-
-    ---
-
-    ### 🚀 Flujo de Procesamiento
-    1. El proveedor sube el documento via esta API.
-    2. El archivo aterriza en un bucket RAW (zona de landing) organizado por proveedor.
-    3. Un proceso automático posterior (Step Function + Bedrock) identifica el tipo de documento, extrae patente/VIN, y lo clasifica en la estructura final.
-    4. El proveedor **NO necesita clasificar** el documento — solo subirlo.
 
     ---
 
@@ -44,7 +38,9 @@ info:
     | :--- | :---: | :---: | :--- | :--- |
     | `x-api-key` | `string` | **Sí** 🔑 | Clave de API asignada | `abcdefghijklmnopqrstuvxwyz` |
     | `Content-Type` | `string` | **Sí** 📁 | Tipo MIME del archivo | `application/pdf` |
-    | `x-provider-id` | `string` | **Sí** 📡 | ID del proveedor (carpeta destino + auditoría) | `gespar` |
+    | `x-provider-id` | `string` | **Sí** 📡 | ID del proveedor (carpeta destino + auditoría) | valor otorgado por administrador de API. |
+    | `x-patente` | `string` | ⚠️ Condicional 🚗 | Patente del vehículo. Al menos uno de `x-patente` o `x-vin` es requerido. | `ABCD12` |
+    | `x-vin` | `string` | ⚠️ Condicional 🚗 | VIN (chasis) del vehículo. Al menos uno de `x-patente` o `x-vin` es requerido. | `WDB1234567890` |
     | `x-filename` | `string` | **Sí** 📄 | Nombre original del archivo con extensión | `permiso-circulacion-ABCD12.pdf` |
 
     ---
@@ -60,14 +56,21 @@ info:
     ### 📁 Estructura de Almacenamiento
     Los archivos se depositan en el bucket de landing con la siguiente estructura:
     ```
-    ingesta/{provider_id}/{filename-original-sanitizado}-{timestamp}-{id-unico}.{ext}
+    ingesta/{provider_id}/{patente-vin}/{filename-original-sanitizado}-{timestamp}-{id-unico}.{ext}
     ```
+    
+    La carpeta del vehículo se forma según los datos enviados:
+    - Ambos headers presentes: `ABCD12-WDB1234567890`
+    - Solo patente: `ABCD12`
+    - Solo VIN: `WDB1234567890`
+
     Ejemplo:
     ```
-    ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf
+    ingesta/proveedor-ejemplo/ABCD12-WDB1234567890/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf
+    ingesta/proveedor-ejemplo/WDB1234567890/cert-homologacion-20260624_160000-f1e2d3c4.pdf
     ```
 
-    La clasificación por tipo de documento y patente/VIN se realiza **automáticamente** en una etapa posterior de procesamiento. El proveedor solo se preocupa de enviar el archivo.
+    La clasificación por tipo de documento se realiza **automáticamente** en una etapa posterior de procesamiento (Bedrock). El proveedor solo se preocupa de enviar el archivo con su identificador de vehículo.
 
     ---
 
@@ -117,16 +120,36 @@ paths:
           description: |
             Identificador único del proveedor o satélite. Determina la carpeta de destino en el bucket y se usa para trazabilidad y auditoría.
             
-            **Valores permitidos:** `gespar` | `controlcar` | `doki`
+            **Valores permitidos:** Administrador de API otorgará valor permitido.
             
             Para solicitar un nuevo provider_id, contactar al equipo de administración.
           schema:
             type: string
             enum:
-              - gespar
-              - controlcar
-              - doki
-            example: "gespar"
+              - proveedor1
+              - proveedor2
+              - proveedorN
+            example: "nombre_proveedor"
+        - name: x-patente
+          in: header
+          required: false
+          description: |
+            Patente (placa) del vehículo asociado al documento.
+            **Al menos uno de `x-patente` o `x-vin` debe estar presente.**
+            Si se tienen ambos, enviar ambos.
+          schema:
+            type: string
+            example: "ABCD12"
+        - name: x-vin
+          in: header
+          required: false
+          description: |
+            VIN (número de chasis) del vehículo asociado al documento.
+            **Al menos uno de `x-patente` o `x-vin` debe estar presente.**
+            Si se tienen ambos, enviar ambos.
+          schema:
+            type: string
+            example: "WDB1234567890"
         - name: x-filename
           in: header
           required: true
@@ -160,7 +183,7 @@ paths:
               example:
                 message: "Documento subido exitosamente"
                 upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                s3_key: "ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
+                s3_key: "ingesta/proveedor-ejemplo/ABCD12-WDB1234567890/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
                 size_bytes: 245000
         '400':
           description: Error en la validación de cabeceras o tipo de archivo no soportado
@@ -174,6 +197,7 @@ paths:
                   value:
                     errors:
                       - "Header x-provider-id es requerido"
+                      - "Al menos uno de los headers x-patente o x-vin es requerido"
                       - "Header x-filename es requerido"
                     upload_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 invalid_content_type:
@@ -226,7 +250,7 @@ components:
         s3_key:
           type: string
           description: Ruta exacta donde quedó almacenado el archivo en el bucket S3.
-          example: "ingesta/gespar/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
+          example: "ingesta/proveedor-ejemplo/ABCD12-WDB1234567890/permiso-circulacion-abcd12-20260624_152040-8d0323e7.pdf"
         size_bytes:
           type: integer
           description: Tamaño final del archivo almacenado, en bytes.
